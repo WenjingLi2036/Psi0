@@ -16,8 +16,8 @@ from websocket import WebSocketApp
 
 TASK_INSTRUCTION = "Spray the bowl and wipe it and stack it up."  
 
-FREQ_CTRL = 60   
-OBS_SEND_INTERVAL = 0.01 
+FREQ_CTRL = 60
+OBS_SEND_INTERVAL = 0.01
 
 json_numpy.patch()
 

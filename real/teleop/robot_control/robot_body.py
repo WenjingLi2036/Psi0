@@ -75,6 +75,9 @@ class BaseBodyController:
         self.JointArmIndex = joint_arm_index_enum
         self.JointLowerIndex = joint_lower_index_enum
         self.stop_event = threading.Event()
+        self._shutdown_damping = False
+        self._damping_command_sent = threading.Event()
+        self.shutdown_damping_kd = 4.0
 
         self.remote_controller = RemoteController()
 
@@ -220,6 +223,15 @@ class BaseBodyController:
             self.msg.motor_cmd[id].kd = float(self.damping[i])
             self.msg.motor_cmd[id].q = self.all_motor_q[id]
 
+    def _set_damping_command(self):
+        """Configure all controlled motors for damping-only behavior."""
+        for id in self.JointIndex:
+            self.msg.motor_cmd[id].mode = 1
+            self.msg.motor_cmd[id].kp = 0.0
+            self.msg.motor_cmd[id].kd = self.shutdown_damping_kd
+            self.msg.motor_cmd[id].dq = 0
+            self.msg.motor_cmd[id].tau = 0.0
+            self.msg.motor_cmd[id].q = 0.0
 
     def _subscribe_motor_state(self):
         """Thread to subscribe to motor state updates."""
@@ -254,28 +266,34 @@ class BaseBodyController:
             start_time = time.time()
 
             with self.ctrl_lock:
+                shutdown_damping = self._shutdown_damping
                 arm_q_target = self.q_target
                 arm_tauff_target = self.tauff_target
                 lower_q_target = self.lower_q_target
                 lower_tauff_target = self.lower_tauff_target
 
-            cliped_arm_q_target = self.clip_arm_q_target(
-                arm_q_target, velocity_limit=self.arm_velocity_limit
-            )
+            if shutdown_damping:
+                self._set_damping_command()
+            else:
+                cliped_arm_q_target = self.clip_arm_q_target(
+                    arm_q_target, velocity_limit=self.arm_velocity_limit
+                )
 
-            for idx, id in enumerate(self.JointArmIndex):
-                self.msg.motor_cmd[id].q = cliped_arm_q_target[idx]
-                # self.msg.motor_cmd[id].q = arm_q_target[idx]
-                self.msg.motor_cmd[id].dq = 0
-                self.msg.motor_cmd[id].tau = arm_tauff_target[idx]
-            
-            for idx, id in enumerate(self.JointLowerIndex):
-                self.msg.motor_cmd[id].q = lower_q_target[idx]
-                self.msg.motor_cmd[id].dq = 0
-                self.msg.motor_cmd[id].tau = lower_tauff_target[idx]
+                for idx, id in enumerate(self.JointArmIndex):
+                    self.msg.motor_cmd[id].q = cliped_arm_q_target[idx]
+                    # self.msg.motor_cmd[id].q = arm_q_target[idx]
+                    self.msg.motor_cmd[id].dq = 0
+                    self.msg.motor_cmd[id].tau = arm_tauff_target[idx]
+
+                for idx, id in enumerate(self.JointLowerIndex):
+                    self.msg.motor_cmd[id].q = lower_q_target[idx]
+                    self.msg.motor_cmd[id].dq = 0
+                    self.msg.motor_cmd[id].tau = lower_tauff_target[idx]
 
             self.msg.crc = self.crc.Crc(self.msg)
             self.lowcmd_publisher.Write(self.msg)
+            if shutdown_damping:
+                self._damping_command_sent.set()
 
             if self._speed_gradual_max is True:
                 t_elapsed = start_time - self._gradual_start_time
@@ -289,6 +307,9 @@ class BaseBodyController:
     def ctrl_whole_body(self, q_target, tauff_target, lower_q_target, lower_tauff_target, is_first=False):
         """Set control target values q & tau of the left and right arm motors."""
         with self.ctrl_lock:
+            if self._shutdown_damping:
+                return
+
             self.q_target = q_target
             self.tauff_target = tauff_target
 
@@ -396,8 +417,20 @@ class BaseBodyController:
             time.sleep(0.01)
 
     def shutdown(self):
-        # self.gradually_set_weight_to_0()
         """Shutdown controller and clean up threads."""
+        logger.info("controller: entering damping mode")
+        self._damping_command_sent.clear()
+        with self.ctrl_lock:
+            self._shutdown_damping = True
+            self.q_target = np.zeros_like(self.q_target)
+            self.tauff_target = np.zeros_like(self.tauff_target)
+            self.lower_q_target = np.zeros_like(self.lower_q_target)
+            self.lower_tauff_target = np.zeros_like(self.lower_tauff_target)
+
+        if self.publish_thread.is_alive():
+            if not self._damping_command_sent.wait(timeout=0.2):
+                logger.warning("controller: timed out waiting for damping command publish")
+
         logger.info("controller: shutting down threads")
         self.stop_event.set()
         self.publish_thread.join(timeout=1)
@@ -433,6 +466,8 @@ class BaseBodyController:
 
         self.lowstate_buffer = DataBuffer()
         self.stop_event.clear()
+        self._shutdown_damping = False
+        self._damping_command_sent.clear()
 
         self.subscribe_thread = threading.Thread(target=self._subscribe_motor_state)
         self.subscribe_thread.daemon = True
