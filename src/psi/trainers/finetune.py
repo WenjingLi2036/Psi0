@@ -588,10 +588,14 @@ class FinetuneTrainer(Trainer):
             mean(0) -> to average over the batch
             sum() -> to sum over the weighted loss of each action dimension
         """
+        # Define the mask for valid action dimensions, default to all ones if not provided
+        # we should set some of them to 0 when some of the action is not used (e.g., gripper is not used)
         mask = batch["actions_mask"].float() if "actions_mask" in batch else torch.ones_like(batch["actions"])
+        mask[..., : min(14, mask.shape[-1])] = 0.0  # by codex, mask out the hand joints since they are not used in the dataset.
         if self.model_cfg.rtc:
             postfix_mask = (~prefix_mask)[:, :, None].float() # type: ignore  (B, Tp, 1)  
             mask = mask * postfix_mask
+        
         
         loss_action = (loss_action * mask).sum(1)  # (B, Da)
         loss_action = (loss_action.mean(0) * self.loss_w).sum()

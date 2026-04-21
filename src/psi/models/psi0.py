@@ -1054,8 +1054,8 @@ class ActionTransformerModel(
         # patch_size: int = 2,
         # in_channels: int = 16,
         # num_layers: int = 24,
-        attention_head_dim: int = 64,
-        num_attention_heads: int = 24,
+        attention_head_dim: int = 64,  # this should match the dim of tokenzer. ?
+        num_attention_heads: int = 24, # why we need this many heads? ablation needed???
         # joint_attention_dim: int = 4096,
         caption_projection_dim: int = 1536,
         pooled_projection_dim: int = 2048,
