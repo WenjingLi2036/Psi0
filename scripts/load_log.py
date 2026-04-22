@@ -15,7 +15,7 @@ LOG_SPECS = {
     "ik_extra_hist": ("ik_extra_hist.bin", 1043),
 }
 
-RAW_ACTION_SLICE = slice(28, 32)
+RAW_ACTION_SLICE = slice(15,19)
 RAW_ACTION_LABELS = ("torso_roll", "torso_pitch", "torso_yaw", "torso_height")
 
 
@@ -60,8 +60,8 @@ def plot_raw_action_torso(raw_actions: np.ndarray, output: Path | None, show: bo
     if len(raw_actions) == 0:
         raise ValueError("raw_actions log is empty")
 
-    t = elapsed_seconds(raw_actions)
-    y = raw_actions["x"][:, RAW_ACTION_SLICE]
+    t = elapsed_seconds(raw_actions)[-20:,...]
+    y = raw_actions["x"][-20:, RAW_ACTION_SLICE]
 
     fig, axes = plt.subplots(4, 1, sharex=True, figsize=(11, 8), constrained_layout=True)
     for i, (axis, label) in enumerate(zip(axes, RAW_ACTION_LABELS)):

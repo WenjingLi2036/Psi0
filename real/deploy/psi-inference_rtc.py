@@ -82,6 +82,7 @@ class RSCamera:
 
 
 def get_observation(camera, state):
+    print("[get_observation] Getting camera frame...")
     frame = camera.get_frame()
     # frame = cv2.resize(frame, (224, 224), interpolation=cv2.INTER_AREA)
     frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -227,16 +228,23 @@ class RTCWebSocketClient:
         self._connected.wait()
 
         prev_tick = time.perf_counter()
-        
+        print("[client] Starting observation send loop...")
+        print("[client] ._running:", self._running)
+        print("[client] running.is_set():", running.is_set()    )
         while self._running and running.is_set():  
             start = time.time()
             try:
+                print("[client] Gathering observation...")
+                print("[clinet] arm_joints:", master.motorstate[15:29])
+                print("[clinet] hand_joints:", master.handstate)
                 # Get observation
                 state = {
                     "arm_joints": master.motorstate[15:29],
                     "hand_joints": master.handstate,
                 }
+                print("[client] Got state observation, getting camera frame...")
                 img_obs, state_obs = get_observation(camera, state)
+                print("[client] Got camera frame, preparing payload...")
                 payload = {
                     "image": img_obs,
                     "state": state_obs,
@@ -331,6 +339,12 @@ def main(server_url, zero_action):
 
         arm_cmd = None
         hand_cmd = None
+        print(have_vla)
+        try:
+            action_logger.log(action[:36])
+        except:
+            action_logger.log(np.zeros(36))
+        
         if have_vla:
             if action.shape[0] < 36:
                 print("[CTRL] Invalid action shape:", action.shape)
@@ -340,7 +354,7 @@ def main(server_url, zero_action):
                 vyaw = action[34]
                 # dyaw = action[35]
                 target_yaw = action[35]
-                action_logger.log(action[:36])
+                
 
                 vx = 0.6 if vx > 0.25 else 0
                 vy = 0 if abs(vy) < 0.3 else 0.5 * (1 if vy > 0 else -1)
@@ -456,11 +470,13 @@ def main(server_url, zero_action):
         print("[WS] WebSocket thread stopped")
 
     try:
+        print("[MAIN] Starting stabilize thread to maintain standing pose...")
         stabilize_thread = threading.Thread(target=master.maintain_standing, daemon=True)
         stabilize_thread.start()
         master.episode_kill_event.set()
         print("[MAIN] Initialize with standing pose...")
-        time.sleep(30)
+        time.sleep(10)
+        print("[MAIN] After 10 sec. Starting main control and WebSocket threads...")
         master.episode_kill_event.clear() 
 
         master.reset_yaw_offset = True

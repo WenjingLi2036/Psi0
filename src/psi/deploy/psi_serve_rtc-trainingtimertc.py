@@ -274,6 +274,7 @@ class Server:
 
     def _parse_obs_payload(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Parse observation payload and return processed obs dict"""
+        print("Parsing obs payload...")
         request = RequestMessage.deserialize(payload)
         image_dict, instruction, history_dict, state_dict, gt_action, dataset_name = \
                     request.image, request.instruction, request.history, request.state, request.gt_action, request.dataset_name
@@ -405,6 +406,7 @@ class Server:
                     
                     if action is not None:
                         # Send action to client
+                        print("Sending action")
                         response = ResponseMessage(action, err=0.0)
                         resp_dict = response.serialize()
                         resp_dict["version"] = version

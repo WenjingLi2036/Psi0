@@ -10,5 +10,5 @@ cd "$(dirname "$0")/../teleop"
 
 python ../deploy/psi-inference_rtc.py \
     --port "$PORT" \
-    --task "$TASK"
+    --task "$TASK" \
     --zero_action True

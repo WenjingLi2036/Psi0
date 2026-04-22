@@ -5,6 +5,7 @@ channels:
   - defaults
 dependencies:
   - _openmp_mutex=4.5
+  - casadi
   - _x86_64-microarch-level=3
   - ampl-asl=1.0.0
   - assimp=6.0.3
@@ -89,6 +90,7 @@ dependencies:
   - nettle=3.10.1
   - octomap=1.10.0
   - openssl=3.6.1
+  - pink
   - p11-kit=0.26.2
   - pinocchio=3.9.0
   - pinocchio-python=3.9.0
@@ -209,7 +211,6 @@ dependencies:
       - pexpect==4.9.0
       - pickleshare==0.7.5
       - pillow==12.1.1
-      - pin==2.7.0
       - pin-pink==3.4.0
       - platformdirs==4.9.4
       - prompt-toolkit==3.0.52

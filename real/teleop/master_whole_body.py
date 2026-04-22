@@ -202,16 +202,16 @@ class RobotTaskmaster:
                 self.hand_shm_array = np.ndarray(
                     (14,), dtype=np.float64, buffer=self.hand_shm.buf
                 )
-
-                try:
-                    self.hand_ctrl = Dex3_1_Controller(
-                        self.hand_shm_array,
-                        self.dual_hand_data_lock,
-                        dual_hand_state_array,
-                        dual_hand_action_array,
-                    )
-                except:
-                    self.hand_ctrl = None
+                self.hand_ctrl = None
+                #try:
+                #    self.hand_ctrl = Dex3_1_Controller(
+                #        self.hand_shm_array,
+                #        self.dual_hand_data_lock,
+                #        dual_hand_state_array,
+                #        dual_hand_action_array,
+                #    )
+                #except:
+                #    self.hand_ctrl = None
             else:
                 logger.error("unknown robot")
                 exit(-1)
