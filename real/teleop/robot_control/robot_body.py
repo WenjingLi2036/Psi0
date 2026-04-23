@@ -101,10 +101,10 @@ class BaseBodyController:
         # pd_tauff = np.zeros(29)
 
         self.q_target = pd_target[15:]
-        self.tauff_target = pd_tauff[15:]
+        self.tauff_target = pd_tauff[15:] * 0.0
 
         self.lower_q_target = pd_target[:15]
-        self.lower_tauff_target = pd_tauff[:15]
+        self.lower_tauff_target = pd_tauff[:15] * 0.0
 
         self.all_motor_q = None
         self.arm_velocity_limit = 30.0
@@ -127,6 +127,9 @@ class BaseBodyController:
         self.odom_subscriber.Init(self._odom_callback, 1)
 
         # Initialize subscribe thread
+        self.true_start_time = time.time()
+        self._ramp_gains = True
+        self._ramp_end_time = 3.0
         self.subscribe_thread = threading.Thread(target=self._subscribe_motor_state)
         self.subscribe_thread.daemon = True
         self.subscribe_thread.start()
@@ -298,6 +301,14 @@ class BaseBodyController:
             if self._speed_gradual_max is True:
                 t_elapsed = start_time - self._gradual_start_time
                 self.arm_velocity_limit = 20.0 + (10.0 * min(1.0, t_elapsed / 5.0))
+
+            if self._ramp_gains:
+                t_elapsed = start_time - self.true_start_time
+                if t_elapsed < self._ramp_end_time:
+                    ramp_factor = t_elapsed / self._ramp_end_time
+                    for id in self.JointIndex:
+                        self.msg.motor_cmd[id].kp = self.stiffness[id] * ramp_factor
+                        self.msg.motor_cmd[id].kd = self.damping[id]
 
             current_time = time.time()
             all_t_elapsed = current_time - start_time

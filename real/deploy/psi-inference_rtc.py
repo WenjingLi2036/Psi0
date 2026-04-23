@@ -318,9 +318,9 @@ class RTCWebSocketClient:
 def main(server_url, zero_action):
     master.reset_yaw_offset = True
 
-    pd_logger = BinaryVectorLogger("logs/pd_targets.bin", dim=58)
-    action_logger = BinaryVectorLogger("logs/raw_actions.bin", dim=36)
-    low_obs_logger = BinaryVectorLogger("logs/ik_extra_hist.bin", dim=1043)
+    pd_logger = BinaryVectorLogger("../../logs/pd_targets.bin", dim=58)
+    action_logger = BinaryVectorLogger("../../logs/raw_actions.bin", dim=36)
+    low_obs_logger = BinaryVectorLogger("../../logs/ik_extra_hist.bin", dim=1043)
 
     _last_target_yaw = None
 
@@ -339,7 +339,6 @@ def main(server_url, zero_action):
 
         arm_cmd = None
         hand_cmd = None
-        print(have_vla)
         try:
             action_logger.log(action[:36])
         except:
