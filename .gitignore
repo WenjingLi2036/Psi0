@@ -54,7 +54,9 @@ props/
 textures/
 test.py
 *.npy
-
+real/shake_hand/
+datasets/
+real/move_white_box_from_yellow_to_red/
 unitree_sdk2_python
 
 .claude
