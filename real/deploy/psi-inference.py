@@ -17,7 +17,7 @@ URL = "http://localhost:8014/act"
 
 TASK_INSTRUCTION = "g1/Spray_the_bowl_and_wipe_it_and_stack_it_up"
 
-FREQ_VLA = 30     
+FREQ_VLA = 30
 FREQ_CTRL = 60  
 MAX_STEPS = 500
 

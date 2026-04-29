@@ -129,7 +129,7 @@ class BaseBodyController:
         # Initialize subscribe thread
         self.true_start_time = time.time()
         self._ramp_gains = True
-        self._ramp_end_time = 3.0
+        self._ramp_end_time = 2.0
         self.subscribe_thread = threading.Thread(target=self._subscribe_motor_state)
         self.subscribe_thread.daemon = True
         self.subscribe_thread.start()
@@ -309,6 +309,8 @@ class BaseBodyController:
                     for id in self.JointIndex:
                         self.msg.motor_cmd[id].kp = self.stiffness[id] * ramp_factor
                         self.msg.motor_cmd[id].kd = self.damping[id]
+                        ramp_q = (1 - ramp_factor) * self.all_motor_q[id] + ramp_factor * self.msg.motor_cmd[id].q
+                        self.msg.motor_cmd[id].q = ramp_q
 
             current_time = time.time()
             all_t_elapsed = current_time - start_time

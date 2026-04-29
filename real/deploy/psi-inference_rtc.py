@@ -2,6 +2,7 @@ import os
 import time
 import threading
 import json
+import queue
 
 import cv2
 import numpy as np
@@ -67,6 +68,73 @@ class BinaryVectorLogger:
         self.f.close()
 
 
+class AsyncVideoWriter:
+    def __init__(self, path: str, fps: float = 30.0, codec: str = "mp4v", queue_size: int = 256):
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.timestamps_path = self.path.with_suffix(".jsonl")
+        self.fps = fps
+        self.fourcc = cv2.VideoWriter_fourcc(*codec)
+        self.queue = queue.Queue(maxsize=queue_size)
+        self.stop_event = threading.Event()
+        self.writer = None
+        self.frame_size = None
+        self.timestamps_file = open(self.timestamps_path, "a", buffering=1)
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.thread.start()
+        print(f"[video] Recording frames to {self.path}")
+
+    def _init_writer(self, frame: np.ndarray):
+        height, width = frame.shape[:2]
+        self.frame_size = (width, height)
+        self.writer = cv2.VideoWriter(
+            str(self.path), self.fourcc, self.fps, self.frame_size
+        )
+        if not self.writer.isOpened():
+            raise RuntimeError(f"Failed to open video writer for {self.path}")
+
+    def write(self, frame_bgr: np.ndarray, t_ns: int | None = None):
+        if frame_bgr is None:
+            return
+
+        if t_ns is None:
+            t_ns = time.time_ns()
+
+        frame_copy = np.ascontiguousarray(frame_bgr)
+        try:
+            self.queue.put_nowait((frame_copy, int(t_ns)))
+        except queue.Full:
+            print("[video] Frame queue full, dropping frame")
+
+    def _run(self):
+        while not self.stop_event.is_set() or not self.queue.empty():
+            try:
+                frame_bgr, t_ns = self.queue.get(timeout=0.5)
+            except queue.Empty:
+                continue
+
+            try:
+                if self.writer is None:
+                    self._init_writer(frame_bgr)
+
+                if frame_bgr.shape[1::-1] != self.frame_size:
+                    frame_bgr = cv2.resize(frame_bgr, self.frame_size)
+
+                self.writer.write(frame_bgr)
+                self.timestamps_file.write(json.dumps({"t_ns": t_ns}) + "\n")
+            except Exception as e:
+                print(f"[video] Failed to write frame: {e}")
+            finally:
+                self.queue.task_done()
+
+    def close(self):
+        self.stop_event.set()
+        self.thread.join()
+        if self.writer is not None:
+            self.writer.release()
+        self.timestamps_file.close()
+
+
 class RSCamera:
     def __init__(self):
         self.context = zmq.Context()
@@ -77,15 +145,17 @@ class RSCamera:
         self.socket.send(b"get_frame")
         rgb_bytes, _, _ = self.socket.recv_multipart()
         rgb_array = np.frombuffer(rgb_bytes, np.uint8)
-        rgb_image = cv2.imdecode(rgb_array, cv2.IMREAD_COLOR)
-        return rgb_image
+        bgr_image = cv2.imdecode(rgb_array, cv2.IMREAD_COLOR)
+        return bgr_image
 
 
-def get_observation(camera, state):
+def get_observation(camera, state, video_writer=None):
     print("[get_observation] Getting camera frame...")
-    frame = camera.get_frame()
+    frame_bgr = camera.get_frame()
+    if video_writer is not None:
+        video_writer.write(frame_bgr)
     # frame = cv2.resize(frame, (224, 224), interpolation=cv2.INTER_AREA)
-    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    frame = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     img = frame.astype(np.uint8)
 
     img_obs = {
@@ -168,8 +238,9 @@ def convert_numpy_in_dict(data, func):
 
 # ============ RTCClient ============
 class RTCWebSocketClient:
-    def __init__(self, server_url: str):
+    def __init__(self, server_url: str, video_writer: AsyncVideoWriter | None = None):
         self.server_url = server_url
+        self.video_writer = video_writer
         self._running = True
         self._connected = threading.Event()
         self._ws = None
@@ -243,7 +314,9 @@ class RTCWebSocketClient:
                     "hand_joints": master.handstate,
                 }
                 print("[client] Got state observation, getting camera frame...")
-                img_obs, state_obs = get_observation(camera, state)
+                img_obs, state_obs = get_observation(
+                    camera, state, video_writer=self.video_writer
+                )
                 print("[client] Got camera frame, preparing payload...")
                 payload = {
                     "image": img_obs,
@@ -315,16 +388,18 @@ class RTCWebSocketClient:
             self._ws.close()
 
 
-def main(server_url, zero_action):
+def main(server_url, keep_standing):
     master.reset_yaw_offset = True
 
     pd_logger = BinaryVectorLogger("../../logs/pd_targets.bin", dim=58)
     action_logger = BinaryVectorLogger("../../logs/raw_actions.bin", dim=36)
     low_obs_logger = BinaryVectorLogger("../../logs/ik_extra_hist.bin", dim=1043)
+    video_path = Path("../../logs") / f"rscamera_{time.strftime('%Y%m%d_%H%M%S')}.mp4"
+    video_writer = AsyncVideoWriter(str(video_path))
 
     _last_target_yaw = None
 
-    def apply_action_from_buffer(last_pd_target, keep_standing = zero_action):
+    def apply_action_from_buffer(last_pd_target, keep_standing):
         current_lr_arm_q, current_lr_arm_dq = master.get_robot_data()
 
         have_vla = False
@@ -417,7 +492,6 @@ def main(server_url, zero_action):
 
         master.get_ik_observation(record=False)
 
-
         pd_target, pd_tauff, raw_action = master.body_ik.solve_whole_body_ik(
             left_wrist=None,
             right_wrist=None,
@@ -457,14 +531,16 @@ def main(server_url, zero_action):
         last_pd_target = None
         while running.is_set() and not kill_event.is_set():
             try:
-                last_pd_target = apply_action_from_buffer(last_pd_target)
+                last_pd_target = apply_action_from_buffer(
+                    last_pd_target, keep_standing=keep_standing
+                )
             except Exception as e:
                 print("[CTRL] loop error:", e)
             time.sleep(dt)
         print("[CTRL] Control loop stopped.")
 
     def websocket_thread():
-        client = RTCWebSocketClient(server_url=server_url)
+        client = RTCWebSocketClient(server_url=server_url, video_writer=video_writer)
         client.run()  
         print("[WS] WebSocket thread stopped")
 
@@ -510,7 +586,23 @@ def main(server_url, zero_action):
         low_obs_logger.close()
         pd_logger.close()
         action_logger.close()
+        video_writer.close()
         print("[MAIN] Shutdown complete.")
+
+def parse_bool(value):
+    if isinstance(value, bool):
+        return value
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "t", "yes", "y", "on"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", "off"}:
+        return False
+
+    raise ValueError(
+        f"Invalid boolean value: {value!r}. Use one of true/false, yes/no, or 1/0."
+    )
+
 
 if __name__ == "__main__":
     import argparse
@@ -518,8 +610,14 @@ if __name__ == "__main__":
     parser.add_argument("--host", type=str, default="localhost")
     parser.add_argument("--port", type=int, default=8014)
     parser.add_argument("--task", type=str, default=TASK_INSTRUCTION)
-    parser.add_argument("--zero_action", type=bool, default=True)
+    parser.add_argument(
+        "--keep_standing",
+        "--zero_action",
+        dest="keep_standing",
+        type=parse_bool,
+        default=True,
+    )
     args = parser.parse_args()
     TASK_INSTRUCTION = args.task
     server_url = f"ws://{args.host}:{args.port}/ws"
-    main(server_url, args.zero_action)
+    main(server_url, args.keep_standing)

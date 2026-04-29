@@ -84,7 +84,8 @@ class RobotTaskmaster:
         self.vyaw = 0.0
 
         # AMO parameters
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        #self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"
 
         self.scales_ang_vel = 0.25
         self.scales_dof_vel = 0.05
