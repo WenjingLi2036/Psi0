@@ -33,6 +33,7 @@ _lerobot_build
 .cache
 .data
 .logs
+logs
 
 *.local.yaml
 
@@ -57,6 +58,7 @@ test.py
 real/shake_hand/
 datasets/
 real/move_white_box_from_yellow_to_red/
+real/sit_to_stand/
 unitree_sdk2_python
 
 .claude

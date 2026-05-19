@@ -41,9 +41,9 @@ overwatch = initialize_overwatch(__name__)
 
 
 PREDICT_HORIZON = 30          # == H
-MIN_EXEC_HORIZON = 15         # == s_min # TODO: should match D_INIT, ideally s_min >= d_real
+MIN_EXEC_HORIZON = 10         # == s_min # TODO: should match D_INIT, ideally s_min >= d_real (check the self.Q to know the real delay on your system)
 DELAY_BUFFER_SIZE = 6        # == delay_buffer_size
-D_INIT = 6                   # == d_init # TODO: placeholder, needs calculation
+D_INIT = 7                   # == d_init # TODO: placeholder, needs calculation
 CTRL_PERIOD_SEC = 1. / 30       # 30Hz
 
 
@@ -66,12 +66,13 @@ class RealTimeChunkController:
         self.t: int = 0
         assert o_first != None, "please provide o_first"
 
+        overwatch.info("[RTC] Predicting first action chunk")
         A_first = self._predict_action(o_first) # (H, D)
 
         # warmup the model
         for i in range (2):
             _ = self._predict_action_rtc(copy.deepcopy(o_first), np.concatenate([copy.deepcopy(A_first[self.s_min:, :]), np.zeros((self.s_min, A_first.shape[1]), dtype=A_first.dtype)], axis=0), d_init)
-        print("Model warmed up")
+        overwatch.info("[RTC] Model warmed up")
 
         self.A_cur = A_first # (H, D)
         self.o_cur: Dict[str, Any] | None = None 
@@ -81,8 +82,10 @@ class RealTimeChunkController:
         self.M = threading.Lock()
         self.C = threading.Condition(self.M)
 
+        overwatch.info("[RTC] Starting inference thread...")
         self._infer_th = threading.Thread(target=self._inference_loop, daemon=True)
         self._infer_th.start()
+        overwatch.info("[RTC] Inference thread started")
 
     def replace_prev_actions_to_obs(self, o, previous_rpy, previous_height):
         o['obs'] = np.concatenate([o['obs'][:, :, :28], previous_rpy[np.newaxis, np.newaxis, :], previous_height[np.newaxis, np.newaxis, :], o['obs'][:, :, 32:]], axis=-1) # (1, 1, 28) -> (1, 1, 32)
@@ -96,7 +99,7 @@ class RealTimeChunkController:
             self.C.notify()
             if self.t-1 >= len(self.A_cur):
                 single_action = self.A_cur[-1]
-                print("failed")
+                overwatch.error("[RTC] Failed to get action: t-1 >= len(A_cur)")
             else:
                 single_action = self.A_cur[self.t - 1]
             return single_action[np.newaxis, :] # (1, D)
@@ -132,8 +135,9 @@ class RealTimeChunkController:
                     self.A_cur = A_new
                     self.t = self.t - s
                     self.Q.append(self.t)          
+                    overwatch.info(f"[inference] Q = {list(self.Q)}")
                     # self.C.notify_all()
-                    print(f"[inference]  latency={time.perf_counter()-inference_start:.4f}s  s={s}  d={d}  self.t={self.t}")
+                    overwatch.info(f"[inference] latency={time.perf_counter()-inference_start:.4f}s  s={s}  d={d}  self.t={self.t} <<<<<<<<<<<<<<<  ")
                 except Exception as e:
                     print(f"\n[ERROR] Inference loop crashed!")
                     print(f"Error: {e}")
@@ -151,7 +155,8 @@ class RealTimeChunkController:
                     num_inference_steps = 8,
                     prev_actions=torch.from_numpy(A_prev[np.newaxis, :, :]).to(self.device), # (H, D) -> (1, H, D)
                     inference_delay=d,
-                    max_delay=8
+                    # max_delay=8
+                    max_delay=10
                 )[0].float().detach().cpu().numpy() # (1, H, D) -> (H, D)
         return A_new
     
@@ -178,6 +183,8 @@ class Server:
         enable_rtc: bool = False,
         action_exec_horizon: int | None = None
     ):
+        print("=== Initializing Server ===")
+        print("checking CUDA availability...")
         if not torch.cuda.is_available():
             raise RuntimeError("CUDA is not available. Please check your CUDA installation.")
         
@@ -185,14 +192,13 @@ class Server:
         overwatch.info(f"Using device: {self.device}")
         overwatch.info(f"Serving {policy}")
 
-        overwatch.info(f"Using device: {self.device}")
-        overwatch.info(f"Serving {policy}")
-
+        print(f"== Checking run_dir and checkpoint...")
         assert osp.exists(run_dir), f"run_dir {run_dir} does not exist!"
         assert osp.exists(run_dir / "checkpoints" / f"ckpt_{ckpt_step}"), f"ckpt {ckpt_step} does not exist!"
         assert osp.exists(run_dir / "run_config.json"), f"run config does not exist!"
         
         # first build dynamic config 
+        print("== Loading config... from argv.txt and run_config.json in the run_dir")
         config_: LaunchConfig = parse_args_to_tyro_config(run_dir / "argv.txt") # type: ignore
         # then load it from previsously saved json
         conf = (run_dir / "run_config.json").open("r").read()
@@ -205,6 +211,7 @@ class Server:
         self.model = Psi0Model.from_pretrained(run_dir, ckpt_step, launch_config, device=device)
         self.model.to(device)
         self.model.eval()
+        overwatch.info("model loaded and set to eval mode")
 
         from psi.config.transform import SimpleRepackTransform, Psi0ModelTransform, ActionStateTransform
         self.maxmin:ActionStateTransform = launch_config.data.transform.field # type:ignore
@@ -217,6 +224,7 @@ class Server:
         assert self.Ta <= self.Tp, "action_exec_horizon is too big"
         self.launch_cfg = launch_config
         self.count = 0
+        overwatch.info(f"Action dimension: {self.Da}, action chunk size: {self.Tp}, action execution horizon: {self.Ta}")
 
 
         # control - shared state with locks
@@ -232,7 +240,9 @@ class Server:
         
         # WebSocket: asyncio event to notify when new action is ready
         self.app = FastAPI()
+        overwatch.info("Setting up FastAPI routes...")
         self._setup_routes()
+        overwatch.info("FastAPI routes set up")
         
         self._action_ready_event: asyncio.Event = None  # Will be created in async context
         self._active_websocket: WebSocket = None
@@ -241,7 +251,9 @@ class Server:
         self.start_time_obs = time.time()
 
     def _init_controller(self, o_first):
+        overwatch.info("Initializing RealTimeChunkController...")
         controller = RealTimeChunkController(policy=self.model, o_first=o_first)
+        overwatch.info("RealTimeChunkController initialized")
         return controller
 
     def _postprocess_action(self, action):
@@ -333,7 +345,8 @@ class Server:
         # Create asyncio event for action notification
         self._action_ready_event = asyncio.Event()
         
-        print("[WebSocket] Client connected")
+        overwatch.info("[WebSocket] Client connected ========== ")
+
         async def receive_obs():
             """Continuously receive obs from client"""
             try:
@@ -343,7 +356,7 @@ class Server:
                     payload = json.loads(data)
                     interval = time.time() - self.start_time_obs
                     self.start_time_obs = time.time()
-                    print(f"[WebSocket] receive_obs interval: {interval} seconds")
+                    overwatch.info(f"[WebSocket] [REC_OBS] receive_obs interval: {interval} seconds")
                     # Parse and update latest_obs
                     this_o = self._parse_obs_payload(payload)
                     with self.obs_lock:
@@ -396,7 +409,7 @@ class Server:
 
                     interval = time.time() - self.start_time
                     self.start_time = time.time()
-                    print(f"[WebSocket] send_action interval: {interval} seconds")
+                    print(f"[WebSocket] [SEND_ACT] send_action interval: {interval} seconds")
                     
                     # Get the action
                     with self.action_lock:
@@ -420,6 +433,7 @@ class Server:
             except Exception as e:
                 print(f"[WebSocket] Send error: {e}")
         
+        overwatch.info("[WebSocket] Starting WebSocket handler tasks...")
         try:
             # Run both tasks concurrently
             await asyncio.gather(receive_obs(), send_action())
@@ -438,9 +452,11 @@ class Server:
         # Initialize controller with first obs
         with self.obs_lock:
             o_first = copy.deepcopy(self.latest_obs)
-            
-        self.controller = self._init_controller(o_first) # wait for model warm up
         
+        overwatch.info("Initializing controller with first observation...")
+        self.controller = self._init_controller(o_first) # wait for model warm up
+        overwatch.info("Controller initialized, starting control loop thread...")
+
         # Start control loop thread
         self._control_thread = threading.Thread(target=self._control_loop, daemon=True)
         self._control_thread.start()
@@ -497,7 +513,7 @@ class Server:
     
 
     def _setup_routes(self):
-        """设置所有路由"""
+        """setup all routes for FastAPI app"""
         @self.app.websocket("/ws")
         async def websocket_endpoint(websocket: WebSocket):
             self._loop = asyncio.get_event_loop()
@@ -508,6 +524,7 @@ class Server:
             return {"status": "ok"}
 
     def run(self, host: str = "0.0.0.0", port: int = 8000) -> None:
+        print("=== server.run() called ===")
         print(f"Server listens on {host}:{port}")
         print(f"WebSocket endpoint: ws://{host}:{port}/ws")
         try:

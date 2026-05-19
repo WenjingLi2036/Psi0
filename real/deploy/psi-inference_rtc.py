@@ -550,7 +550,7 @@ def main(server_url, keep_standing):
         stabilize_thread.start()
         master.episode_kill_event.set()
         print("[MAIN] Initialize with standing pose...")
-        time.sleep(10)
+        time.sleep(20)
         print("[MAIN] After 10 sec. Starting main control and WebSocket threads...")
         master.episode_kill_event.clear() 
 
