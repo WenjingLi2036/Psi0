@@ -75,7 +75,7 @@ finetune_real_psi0_config \
 --model.no-use_film \
 --model.no-combined_temb \
 --model.rtc \
---model.max-delay=8
+--model.max-delay=10 
 "
 
 torchrun --nproc_per_node=$NPROC_PER_NODE --master_port=29500 scripts/train.py \

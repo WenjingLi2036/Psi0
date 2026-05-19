@@ -589,7 +589,10 @@ class FinetuneTrainer(Trainer):
             sum() -> to sum over the weighted loss of each action dimension
         """
         mask = batch["actions_mask"].float() if "actions_mask" in batch else torch.ones_like(batch["actions"])
-        mask[..., : min(14, mask.shape[-1])] = 0.0 
+        mask[..., : min(14, mask.shape[-1])] = 0.0 # by codex, mask out the hand joints since they are not used in the dataset.
+        # Since we want to enable the dex1 hand, we need to turn some of the hand joints back on
+        mask[...,  6 ] = 1.0 # left index 1 joint
+        mask[..., 13 ] = 1.0 # right index 1 joint
         if self.model_cfg.rtc:
             postfix_mask = (~prefix_mask)[:, :, None].float() # type: ignore  (B, Tp, 1)  
             mask = mask * postfix_mask
