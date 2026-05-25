@@ -15,6 +15,7 @@ from teleop.robot_control.robot_body import G1_29_BodyController
 from teleop.robot_control.robot_body_ik import G1_29_BodyIK
 from teleop.robot_control.robot_hand_inspire import Inspire_Controller
 from teleop.robot_control.robot_hand_unitree import Dex3_1_Controller
+from teleop.robot_control.robot_dex1_unitree import Dex1_hand_Controller
 from teleop.utils.logger import logger
 from teleop.writers import IKDataWriter
 from teleop.robot_control.compute_tau import GetTauer
@@ -203,8 +204,17 @@ class RobotTaskmaster:
                 self.hand_shm_array = np.ndarray(
                     (14,), dtype=np.float64, buffer=self.hand_shm.buf
                 )
-                self.hand_ctrl = None
-                # TODO: add the dex1 hand controller here
+                # self.hand_ctrl = None
+                try:
+                    self.hand_ctrl = Dex1_hand_Controller(
+                        self.hand_shm_array,
+                        self.dual_hand_data_lock,
+                        dual_hand_state_array,
+                        dual_hand_action_array,
+                    )
+                except:
+                    print("Failed to initialize Dex1 hand controller. Hand control will be disabled.")
+                    self.hand_ctrl = None
                 #try:
                 #    self.hand_ctrl = Dex3_1_Controller(
                 #        self.hand_shm_array,
@@ -609,7 +619,7 @@ class RobotTaskmaster:
                     else:
                         continue
                     with self.dual_hand_data_lock:
-                        self.hand_shm_array[:] = self.hand_shm_array[:] * 0.0
+                        self.hand_shm_array[:] = self.hand_shm_array[:] # turn on the hand control.
 
                     end_time = time.time()
 
@@ -853,7 +863,7 @@ class RobotTaskmaster:
         pd_tauff[15:] = self.get_tauer(np.array(arm_poseList))
 
         with self.dual_hand_data_lock:
-            self.hand_shm_array[:] = hand_poseList * 0.0
+            self.hand_shm_array[:] = hand_poseList 
 
         self.body_ctrl.ctrl_whole_body(pd_target[15:], pd_tauff[15:], pd_target[:15], pd_tauff[:15])
 

@@ -437,7 +437,7 @@ def main(server_url, keep_standing):
 
                 rpyh   = action[28:32]
                 arm_cmd = action[14:28]
-                hand_cmd = action[:14] * 0.0
+                hand_cmd = action[:14] * 1.0 # turn on hand control
 
                 master.torso_roll   = rpyh[0]
                 master.torso_pitch  = rpyh[1]
