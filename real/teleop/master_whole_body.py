@@ -204,6 +204,7 @@ class RobotTaskmaster:
                     (14,), dtype=np.float64, buffer=self.hand_shm.buf
                 )
                 self.hand_ctrl = None
+                # TODO: add the dex1 hand controller here
                 #try:
                 #    self.hand_ctrl = Dex3_1_Controller(
                 #        self.hand_shm_array,
@@ -307,8 +308,6 @@ class RobotTaskmaster:
                 self.hand_shm.unlink()
             logger.info("Master: exited")
 
-
-
     def get_ik_observation(self, record=True):
         rpy = self.rpy
         
@@ -396,11 +395,6 @@ class RobotTaskmaster:
             self.gait_cycle = np.array([0.25, 0.75])
 
         return self.observation, self.extra_hist
-
-        
-
-
-
 
     def get_robot_data(self):
         motorstate = self.body_ctrl.get_current_motor_q()

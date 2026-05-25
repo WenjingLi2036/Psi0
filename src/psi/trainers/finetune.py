@@ -590,6 +590,8 @@ class FinetuneTrainer(Trainer):
         """
         mask = batch["actions_mask"].float() if "actions_mask" in batch else torch.ones_like(batch["actions"])
         mask[..., : min(14, mask.shape[-1])] = 0.0 
+        mask[..., 6 ] = 1.0
+        mask[..., 13] = 1.0
         if self.model_cfg.rtc:
             postfix_mask = (~prefix_mask)[:, :, None].float() # type: ignore  (B, Tp, 1)  
             mask = mask * postfix_mask

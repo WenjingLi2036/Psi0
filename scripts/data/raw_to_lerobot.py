@@ -207,8 +207,8 @@ class HE2LeRobotConverter:
         arm_joints = arm_joints_from_qpos
         # arm_joints = [float(x) for x in states.get("arm_state", [])]
         # leg_joints = [float(x) for x in states.get("leg_state", [])]
-        # hand_joints = [float(x) for x in states.get("hand_state", [])]
-        hand_joints = [float(0.0) for i in range(14)]
+        hand_joints = [float(x) for x in states.get("hand_state", [])]
+        # hand_joints = [float(0.0) for i in range(14)]
         # print(hand_joints)
         torso_rpy = [float(x) for x in prev_rpy_height["torso_rpy"]]
         # print(torso_rpy)
@@ -241,7 +241,7 @@ class HE2LeRobotConverter:
                 hand_joints.extend([float(x) for x in l])
                 hand_joints.extend([float(x) for x in r])
 
-        hand_joints = [float(0.0) for _ in range(14) ]
+        # hand_joints = [float(0.0) for _ in range(14) ] #uncomment his if using fake hand.
         sq = actions.get("sol_q")
         if sq is not None:
             body_joints = [float(x) for x in sq]

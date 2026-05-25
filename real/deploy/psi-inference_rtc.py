@@ -311,7 +311,7 @@ class RTCWebSocketClient:
                 # Get observation
                 state = {
                     "arm_joints": master.motorstate[15:29],
-                    "hand_joints": master.handstate,
+                    "hand_joints": master.handstate,  # check the handstate here!
                 }
                 print("[client] Got state observation, getting camera frame...")
                 img_obs, state_obs = get_observation(
@@ -391,6 +391,7 @@ class RTCWebSocketClient:
 def main(server_url, keep_standing):
     master.reset_yaw_offset = True
 
+    # create loggers and video writer
     pd_logger = BinaryVectorLogger("../../logs/pd_targets.bin", dim=58)
     action_logger = BinaryVectorLogger("../../logs/raw_actions.bin", dim=36)
     low_obs_logger = BinaryVectorLogger("../../logs/ik_extra_hist.bin", dim=1043)
@@ -443,7 +444,7 @@ def main(server_url, keep_standing):
                 master.torso_yaw    = rpyh[2]
                 master.torso_height = rpyh[3]
 
-                print("torso_roll, pitch, yaw, height:", master.torso_roll, master.torso_pitch, master.torso_yaw, master.torso_height)
+                # print("torso_roll, pitch, yaw, height:", master.torso_roll, master.torso_pitch, master.torso_yaw, master.torso_height)
 
                 master.vx = vx
                 master.vy = vy
@@ -477,9 +478,9 @@ def main(server_url, keep_standing):
             master.target_yaw = master.prev_target_yaw
 
         if keep_standing:
-            master.torso_roll = 0.0
-            master.torso_pitch = 0.0
-            master.torso_yaw = 0.0
+            master.torso_roll   = 0.0
+            master.torso_pitch  = 0.0
+            master.torso_yaw    = 0.0
             master.torso_height = 0.75
 
             master.vx = 0.0
@@ -523,8 +524,6 @@ def main(server_url, keep_standing):
         )
 
         return pd_target
-
-    
 
     def control_loop_thread():
         dt = 1.0 / FREQ_CTRL
