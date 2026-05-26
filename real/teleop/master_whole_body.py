@@ -174,15 +174,6 @@ class RobotTaskmaster:
         self.prev_vyaw = 0.0
         self.prev_dyaw = 0.0
         self.prev_target_yaw = 0.0
-
-        # self.tau_history = []
-        # self.tau_log_path = f"tau_log_{int(time.time())}.csv"
-        # self.tau_file = open(self.tau_log_path, mode='w', newline='')
-        # self.tau_writer = csv.writer(self.tau_file)
-        
-        # self.tau_writer.writerow(['t', 'tau_22', 'tau_23', 'tau_24', 'tau_25', 'tau_26', 'tau_27', 'tau_28'])
-
-        # self.start_time = time.time()
         
         try:
             if robot == "g1":

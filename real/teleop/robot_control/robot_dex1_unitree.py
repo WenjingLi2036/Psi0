@@ -131,6 +131,11 @@ class Dex1_hand_Controller:
 
     def ctrl_dual_gripper(self, left_q_target, right_q_target):
         """set current left, right gripper motor cmd target q"""
+        # clip the left_q_target and right_q_target to be within the valid range of the gripper
+        left_q_target[6] = np.clip(left_q_target[6], 0.0, 5.40)
+        right_q_target[6] = np.clip(right_q_target[6], 0.0, 5.40)
+        print(f"[Dex1_1_Controller] ctrl_dual_gripper with left_q_target[6]: {left_q_target[6]:.2f}, right_q_target[6]: {right_q_target[6]:.2f}")
+
         self.left_gripper_msg.cmds[0].q  = left_q_target[6]
         self.right_gripper_msg.cmds[0].q = right_q_target[6]
 
@@ -184,17 +189,17 @@ class Dex1_hand_Controller:
             sleep_time = max(0, (1 / self.fps) - time_elapsed)
             time.sleep(sleep_time)
 
-        print("Dex3_1_Controller has been closed.")
+        print("Dex1_1_Controller has been closed.")
         
     def get_current_dual_hand_q(self):
-        print("[Dex1_1_Controller] Return dummy values except for the 7th and 14th elements...")
+        # print("[Dex1_1_Controller] Return dummy values except for the 7th and 14th elements...")
         handstate = np.zeros(14, dtype=np.float64)
         handstate[6] = self.left_gripper_state_value.value
         handstate[13] = self.right_gripper_state_value.value
         return handstate
     
     def get_current_dual_hand_pressure(self):
-        print("[Dex1_1_Controller] Return dummy values...")
+        # print("[Dex1_1_Controller] Return dummy values for hand pressure...")
         return np.zeros((18, 12), dtype=np.float64)
 
     def shutdown(self):

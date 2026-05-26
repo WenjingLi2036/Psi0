@@ -57,6 +57,7 @@ test.py
 *.npy
 real/shake_hand/
 real/test_dex1/
+real/Handover/
 datasets/
 real/move_white_box_from_yellow_to_red/
 real/sit_to_stand/
